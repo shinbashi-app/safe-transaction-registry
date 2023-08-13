@@ -15,6 +15,14 @@ struct SafeTransaction {
 }
 
 interface ISafe {
+    /**
+     * @notice Reads `length` bytes of storage in the currents contract
+     * @param offset - the offset in the current contract's storage in words to start reading from
+     * @param length - the number of words (32 bytes) of data to read
+     * @return the bytes that were read.
+     */
+    function getStorageAt(uint256 offset, uint256 length) external view returns (bytes memory);
+
     function checkNSignatures(
         bytes32 dataHash,
         bytes memory, /* data */
@@ -48,6 +56,8 @@ contract SafeTransactionRegistry {
     function registerSafeTransaction(address safe, uint256 nonce, SafeTransaction memory safeTransaction) external {
         ISafe safeContract = ISafe(safe);
 
+        require(getSafeNonce(safeContract) <= nonce, "Nonce is too low");
+
         bytes32 transactionHash = safeContract.getTransactionHash(
             safeTransaction.to,
             safeTransaction.value,
@@ -75,5 +85,38 @@ contract SafeTransactionRegistry {
     {
         SafeTransaction storage safeTransaction = transactions[safe][nonce][index];
         safeTransaction.signatures = abi.encodePacked(safeTransaction.signatures, signature);
+    }
+
+    function getTransaction(
+        address safe,
+        uint256 nonce,
+        uint256 index
+    )
+        external
+        view
+        returns (SafeTransaction memory)
+    {
+        return transactions[safe][nonce][index];
+    }
+
+    function getStorageAt(uint256 offset, uint256 length) public view returns (bytes memory) {
+        bytes memory result = new bytes(length * 32);
+        for (uint256 index = 0; index < length; index++) {
+            // solhint-disable-next-line no-inline-assembly
+            /// @solidity memory-safe-assembly
+            assembly {
+                let word := sload(add(offset, index))
+                mstore(add(add(result, 0x20), mul(index, 0x20)), word)
+            }
+        }
+        return result;
+    }
+
+    function getSafeNonce(ISafe safe) internal view returns (uint256 nonce) {
+        bytes memory nonceBytes = safe.getStorageAt(5, 1);
+
+        assembly {
+            nonce := mload(add(nonceBytes, 0x20))
+        }
     }
 }
