@@ -2,8 +2,15 @@
 pragma solidity >=0.8.19 <0.9.0;
 
 import { SafeTransactionRegistry, SafeTransaction, ISafe } from "../src/SafeTransactionRegistry.sol";
+import { SafeProxyFactory } from "safe-contracts/contracts/proxies/SafeProxyFactory.sol";
+import { SafeL2 } from "safe-contracts/contracts/SafeL2.sol";
+import { CompatibilityFallbackHandler } from "safe-contracts/contracts/handler/CompatibilityFallbackHandler.sol";
 
 contract TestUtils {
+    SafeL2 public safeSingleton = new SafeL2();
+    SafeProxyFactory public factory = new SafeProxyFactory();
+    CompatibilityFallbackHandler public handler = new CompatibilityFallbackHandler();
+
     function equals(
         SafeTransaction memory firstTransaction,
         SafeTransaction memory secondTransaction
@@ -42,5 +49,35 @@ contract TestUtils {
         );
     }
 
-    function deploySafe() { }
+    function deploySafe(
+        address[] calldata owners,
+        uint256 threshold,
+        address to,
+        bytes calldata data,
+        address fallbackHandler,
+        address paymentToken,
+        uint256 payment,
+        address payable paymentReceiver
+    )
+        public
+        returns (address payable safe)
+    {
+        safe = payable(
+            factory.createProxyWithNonce(
+                address(safeSingleton),
+                abi.encodeWithSelector(
+                    safeSingleton.setup.selector,
+                    owners,
+                    threshold,
+                    to,
+                    data,
+                    fallbackHandler,
+                    paymentToken,
+                    payment,
+                    paymentReceiver
+                ),
+                0
+            )
+        );
+    }
 }

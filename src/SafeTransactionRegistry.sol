@@ -63,7 +63,7 @@ contract SafeTransactionRegistry {
 
     constructor() { }
 
-    function registerSafeTransaction(ISafe safe, uint256 nonce, SafeTransaction memory safeTransaction) external {
+    function registerSafeTransaction(ISafe safe, uint256 nonce, SafeTransaction calldata safeTransaction) external {
         require(getSafeNonce(safe) <= nonce, "Nonce is too low");
 
         bytes32 transactionHash = safe.getTransactionHash(
@@ -88,24 +88,24 @@ contract SafeTransactionRegistry {
         return transactions[safe][nonce][index];
     }
 
-    function registerTransactionSignatures(
-        ISafe safe,
-        uint256 nonce,
-        uint256 index,
-        SafeTransactionSignature calldata signatures
-    )
-        external
-    {
-        ISafe safeContract = ISafe(safe);
-        SafeTransaction storage safeTransaction = transactions[address(safe)][nonce][index];
+    // function registerTransactionSignatures(
+    //     ISafe safe,
+    //     uint256 nonce,
+    //     uint256 index,
+    //     SafeTransactionSignature calldata signatures
+    // )
+    //     external
+    // {
+    //     ISafe safeContract = ISafe(safe);
+    //     SafeTransaction storage safeTransaction = transactions[address(safe)][nonce][index];
 
-        bytes memory signaturesBytes = encodeSignatures(safeTransaction.signatures);
-        safeContract.checkNSignatures(
-            safeTransaction.safeTxHash, "", signaturesBytes, safeTransaction.signatures.length
-        );
+    //     bytes memory signaturesBytes = encodeSignatures(safeTransaction.signatures);
+    //     safeContract.checkNSignatures(
+    //         safeTransaction.safeTxHash, "", signaturesBytes, safeTransaction.signatures.length
+    //     );
 
-        safeTransaction.signatures.push(signatures);
-    }
+    //     safeTransaction.signatures.push(signatures);
+    // }
 
     function getStorageAt(uint256 offset, uint256 length) public view returns (bytes memory) {
         bytes memory result = new bytes(length * 32);
