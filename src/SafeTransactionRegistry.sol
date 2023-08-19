@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 struct SafeTransaction {
     address to;
@@ -11,7 +11,15 @@ struct SafeTransaction {
     uint256 gasPrice;
     address gasToken;
     address refundReceiver;
-    bytes signatures;
+    bytes32 safeTxHash;
+    SafeTransactionSignature[] signatures;
+}
+
+struct SafeTransactionSignature {
+    uint8 v;
+    bytes32 r;
+    bytes32 s;
+    bytes dynamicPart;
 }
 
 interface ISafe {
@@ -51,14 +59,14 @@ interface ISafe {
 contract SafeTransactionRegistry {
     mapping(address safe => mapping(uint256 nonce => SafeTransaction[])) public transactions;
 
+    uint8 public constant SIGNATURE_LENGTH_BYTES = 65;
+
     constructor() { }
 
-    function registerSafeTransaction(address safe, uint256 nonce, SafeTransaction memory safeTransaction) external {
-        ISafe safeContract = ISafe(safe);
+    function registerSafeTransaction(ISafe safe, uint256 nonce, SafeTransaction memory safeTransaction) external {
+        require(getSafeNonce(safe) <= nonce, "Nonce is too low");
 
-        require(getSafeNonce(safeContract) <= nonce, "Nonce is too low");
-
-        bytes32 transactionHash = safeContract.getTransactionHash(
+        bytes32 transactionHash = safe.getTransactionHash(
             safeTransaction.to,
             safeTransaction.value,
             safeTransaction.data,
@@ -70,33 +78,33 @@ contract SafeTransactionRegistry {
             safeTransaction.refundReceiver,
             nonce
         );
-        safeContract.checkNSignatures(transactionHash, "", safeTransaction.signatures, 1);
+        bytes memory signatures = encodeSignatures(safeTransaction.signatures);
+        safe.checkNSignatures(transactionHash, "", signatures, safeTransaction.signatures.length);
 
-        transactions[safe][nonce].push(safeTransaction);
+        transactions[address(safe)][nonce].push(safeTransaction);
     }
 
-    function registerTransactionSignature(
-        address safe,
+    function getTransaction(address safe, uint256 nonce, uint256 index) public view returns (SafeTransaction memory) {
+        return transactions[safe][nonce][index];
+    }
+
+    function registerTransactionSignatures(
+        ISafe safe,
         uint256 nonce,
         uint256 index,
-        bytes memory signature
+        SafeTransactionSignature calldata signatures
     )
         external
     {
-        SafeTransaction storage safeTransaction = transactions[safe][nonce][index];
-        safeTransaction.signatures = abi.encodePacked(safeTransaction.signatures, signature);
-    }
+        ISafe safeContract = ISafe(safe);
+        SafeTransaction storage safeTransaction = transactions[address(safe)][nonce][index];
 
-    function getTransaction(
-        address safe,
-        uint256 nonce,
-        uint256 index
-    )
-        external
-        view
-        returns (SafeTransaction memory)
-    {
-        return transactions[safe][nonce][index];
+        bytes memory signaturesBytes = encodeSignatures(safeTransaction.signatures);
+        safeContract.checkNSignatures(
+            safeTransaction.safeTxHash, "", signaturesBytes, safeTransaction.signatures.length
+        );
+
+        safeTransaction.signatures.push(signatures);
     }
 
     function getStorageAt(uint256 offset, uint256 length) public view returns (bytes memory) {
@@ -118,5 +126,41 @@ contract SafeTransactionRegistry {
         assembly {
             nonce := mload(add(nonceBytes, 0x20))
         }
+    }
+
+    /**
+     * @notice Encodes signatures into bytes
+     * @dev Signatures must be sorted by signer address, case-insensitive
+     * @param signatures - array of signatures
+     * @return signatures in bytes
+     */
+    function encodeSignatures(SafeTransactionSignature[] memory signatures) internal pure returns (bytes memory) {
+        bytes memory signatureBytes;
+        bytes memory dynamicBytes;
+        for (uint256 i = 0; i < signatures.length; i++) {
+            if (signatures[i].dynamicPart.length > 0) {
+                /* 
+                A contract signature has a static part of 65 bytes and the dynamic part that needs to be appended at the
+                end of signature bytes.
+                The signature format is
+                Signature type == 0
+                Constant part: 65 bytes
+                {32-bytes signature verifier}{32-bytes dynamic data position}{1-byte signature type}
+                Dynamic part (solidity bytes): 32 bytes + signature data length
+                {32-bytes signature length}{bytes signature data}
+            */
+                bytes32 dynamicPartPosition = bytes32(signatures.length * SIGNATURE_LENGTH_BYTES + dynamicBytes.length);
+                bytes32 dynamicPartLength = bytes32(signatures[i].dynamicPart.length);
+                bytes memory staticSignature = abi.encodePacked(signatures[i].r, dynamicPartPosition, signatures[i].v);
+                bytes memory dynamicPartWithLength = abi.encodePacked(dynamicPartLength, signatures[i].dynamicPart);
+
+                signatureBytes = abi.encodePacked(signatureBytes, staticSignature);
+                dynamicBytes = abi.encodePacked(dynamicBytes, dynamicPartWithLength);
+            } else {
+                signatureBytes = abi.encodePacked(signatureBytes, signatures[i].r, signatures[i].s);
+            }
+        }
+
+        return abi.encodePacked(signatureBytes, dynamicBytes);
     }
 }

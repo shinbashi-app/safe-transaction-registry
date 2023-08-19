@@ -41,4 +41,6 @@ contract TestUtils {
                 )
         );
     }
+
+    function deploySafe() { }
 }
