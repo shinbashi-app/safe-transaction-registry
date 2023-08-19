@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.21;
 
+import { console2 } from "forge-std/console2.sol";
+
 struct SafeTransaction {
     address to;
     uint256 value;
@@ -32,6 +34,7 @@ interface ISafe {
     function getStorageAt(uint256 offset, uint256 length) external view returns (bytes memory);
 
     function checkNSignatures(
+        address executor,
         bytes32 dataHash,
         bytes memory, /* data */
         bytes memory signatures,
@@ -65,6 +68,7 @@ contract SafeTransactionRegistry {
 
     function registerSafeTransaction(ISafe safe, uint256 nonce, SafeTransaction calldata safeTransaction) external {
         require(getSafeNonce(safe) <= nonce, "Nonce is too low");
+        require(safeTransaction.signatures.length > 0, "Signatures must not be empty");
 
         bytes32 transactionHash = safe.getTransactionHash(
             safeTransaction.to,
@@ -78,8 +82,10 @@ contract SafeTransactionRegistry {
             safeTransaction.refundReceiver,
             nonce
         );
+        require(transactionHash == safeTransaction.safeTxHash, "Transaction hash does not match");
+
         bytes memory signatures = encodeSignatures(safeTransaction.signatures);
-        safe.checkNSignatures(transactionHash, "", signatures, safeTransaction.signatures.length);
+        safe.checkNSignatures(msg.sender, transactionHash, "", signatures, safeTransaction.signatures.length);
 
         transactions[address(safe)][nonce].push(safeTransaction);
     }
@@ -157,7 +163,7 @@ contract SafeTransactionRegistry {
                 signatureBytes = abi.encodePacked(signatureBytes, staticSignature);
                 dynamicBytes = abi.encodePacked(dynamicBytes, dynamicPartWithLength);
             } else {
-                signatureBytes = abi.encodePacked(signatureBytes, signatures[i].r, signatures[i].s);
+                signatureBytes = abi.encodePacked(signatureBytes, signatures[i].r, signatures[i].s, signatures[i].v);
             }
         }
 

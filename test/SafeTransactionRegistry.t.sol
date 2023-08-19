@@ -5,6 +5,7 @@ import { PRBTest } from "@prb/test/PRBTest.sol";
 import { console2 } from "forge-std/console2.sol";
 import { StdCheats } from "forge-std/StdCheats.sol";
 import { SafeL2 } from "safe-contracts/contracts/SafeL2.sol";
+import { Enum } from "safe-contracts/contracts/common/Enum.sol";
 import { MockContract } from "mock-contract/MockContract.sol";
 
 import {
@@ -23,27 +24,25 @@ interface IERC20 {
 /// https://book.getfoundry.sh/forge/writing-tests
 contract SafeTransactionRegistryTest is PRBTest, StdCheats {
     SafeTransactionRegistry internal STRegistry;
-    MockContract internal mock;
     TestUtils internal testUtils;
     SafeL2 internal safe;
-    address internal owner1;
-    address internal owner2;
-    address internal owner3;
+    Account internal owner1;
+    Account internal owner2;
+    Account internal owner3;
 
     /// @dev A function invoked before each test case is run.
     function setUp() public virtual {
         // Instantiate the contract-under-test.
         STRegistry = new SafeTransactionRegistry();
-        mock = new MockContract();
         testUtils = new TestUtils();
 
-        owner1 = makeAddr("owner1");
-        owner2 = makeAddr("owner2");
-        owner3 = makeAddr("owner3");
+        owner1 = makeAccount("owner1");
+        owner2 = makeAccount("owner2");
+        owner3 = makeAccount("owner3");
 
         address[] memory owners = new address[](2);
-        owners[0] = owner1;
-        owners[1] = owner2;
+        owners[0] = owner1.addr;
+        owners[1] = owner2.addr;
 
         safe = SafeL2(
             testUtils.deploySafe(
@@ -54,72 +53,114 @@ contract SafeTransactionRegistryTest is PRBTest, StdCheats {
 
     function test_registersSafeTransaction(bytes32 transactionHash) public { }
 
-    // function test_registersSafeTransaction(bytes32 transactionHash) public {
-    //     // we set non-specific mock method to return an invalid data because the methods are prioritized by
-    // specificity
-    //     // so if it calls with unexpected calldata, it will return invalid data
-    //     mock.givenAnyReturn(bytes("0xbeef"));
+    function test_registersSafeTransaction() public {
+        bytes32 transactionHash = safe.getTransactionHash(
+            address(0x73), 73, bytes("0xbeef"), Enum.Operation.Call, 73, 73, 73, address(0x73), address(0x73), 0
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(owner1.key, transactionHash);
+        SafeTransactionSignature[] memory signatures = new SafeTransactionSignature[](1);
+        signatures[0] = SafeTransactionSignature({ v: v, r: r, s: s, dynamicPart: bytes("") });
 
-    //     SafeTransaction memory safeTransaction = SafeTransaction({
-    //         to: address(0x73),
-    //         value: 73,
-    //         data: bytes("0xbeef"),
-    //         operation: 0,
-    //         safeTxGas: 73,
-    //         baseGas: 73,
-    //         gasPrice: 73,
-    //         gasToken: address(0x73),
-    //         refundReceiver: address(0x73),
-    //         signatures: bytes("")
-    //     });
+        SafeTransaction memory safeTransaction = SafeTransaction({
+            to: address(0x73),
+            value: 73,
+            data: bytes("0xbeef"),
+            operation: 0,
+            safeTxGas: 73,
+            baseGas: 73,
+            gasPrice: 73,
+            gasToken: address(0x73),
+            refundReceiver: address(0x73),
+            safeTxHash: transactionHash,
+            signatures: signatures
+        });
 
-    //     bytes memory getTransactionHashCalldata = abi.encodeWithSelector(
-    //         ISafe.getTransactionHash.selector,
-    //         safeTransaction.to,
-    //         safeTransaction.value,
-    //         safeTransaction.data,
-    //         safeTransaction.operation,
-    //         safeTransaction.safeTxGas,
-    //         safeTransaction.baseGas,
-    //         safeTransaction.gasPrice,
-    //         safeTransaction.gasToken,
-    //         safeTransaction.refundReceiver,
-    //         0
-    //     );
-    //     bytes memory checkSigsCalldata =
-    //         abi.encodeWithSelector(ISafe.checkNSignatures.selector, transactionHash, "", safeTransaction.signatures,
-    // 1);
-    //     console2.logBytes(getTransactionHashCalldata);
-    //     mock.givenCalldataReturnBytes32(getTransactionHashCalldata, transactionHash);
-    //     mock.givenCalldataReturn(checkSigsCalldata, "");
+        STRegistry.registerSafeTransaction(ISafe(address(safe)), 0, safeTransaction);
 
-    //     STRegistry.registerSafeTransaction(address(mock), 0, safeTransaction);
+        SafeTransaction memory registeredSafeTransaction = STRegistry.getTransaction(address(safe), 0, 0);
 
-    //     SafeTransaction memory registeredSafeTransaction = STRegistry.getTransaction(address(mock), 0, 0);
+        assert(testUtils.equals(safeTransaction, registeredSafeTransaction));
+    }
 
-    //     assert(testUtils.equals(safeTransaction, registeredSafeTransaction));
-    // }
+    function test_registerSafeTransactionSigCheckFailsWithBadSafeTxHash(
+        bytes32 hash,
+        bytes32 r,
+        bytes32 s,
+        uint8 v
+    )
+        public
+    {
+        SafeTransactionSignature[] memory signatures = new SafeTransactionSignature[](1);
+        signatures[0] = SafeTransactionSignature({ v: v, r: r, s: s, dynamicPart: bytes("") });
 
-    // function test_registerSafeTransactionSigCheckFails() public {
-    //     SafeTransactionSignature[] memory signatures = new SafeTransactionSignature[](0);
+        SafeTransaction memory safeTransaction = SafeTransaction({
+            to: address(0x73),
+            value: 73,
+            data: bytes("0xbeef"),
+            operation: 0,
+            safeTxGas: 73,
+            baseGas: 73,
+            gasPrice: 73,
+            gasToken: address(0x73),
+            refundReceiver: address(0x73),
+            signatures: signatures,
+            safeTxHash: hash
+        });
 
-    //     SafeTransaction memory safeTransaction = SafeTransaction({
-    //         to: address(safe),
-    //         value: 0,
-    //         data: bytes(""),
-    //         operation: 0,
-    //         safeTxGas: 0,
-    //         baseGas: 0,
-    //         gasPrice: 0,
-    //         gasToken: address(0x1),
-    //         refundReceiver: address(0x1),
-    //         signatures: signatures,
-    //         safeTxHash: bytes32(0)
-    //     });
+        vm.expectRevert("Transaction hash does not match");
+        STRegistry.registerSafeTransaction(ISafe(address(safe)), 0, safeTransaction);
+    }
 
-    //     vm.expectRevert();
-    //     STRegistry.registerSafeTransaction(ISafe(address(safe)), 0, safeTransaction);
-    // }
+    function test_registerSafeTransactionSigCheckFailsWithEmptySignatures() public {
+        SafeTransactionSignature[] memory signatures = new SafeTransactionSignature[](0);
+
+        bytes32 transactionHash = safe.getTransactionHash(
+            address(0x73), 73, bytes("0xbeef"), Enum.Operation.Call, 73, 73, 73, address(0x73), address(0x73), 0
+        );
+
+        SafeTransaction memory safeTransaction = SafeTransaction({
+            to: address(0x73),
+            value: 73,
+            data: bytes("0xbeef"),
+            operation: 0,
+            safeTxGas: 73,
+            baseGas: 73,
+            gasPrice: 73,
+            gasToken: address(0x73),
+            refundReceiver: address(0x73),
+            signatures: signatures,
+            safeTxHash: transactionHash
+        });
+
+        vm.expectRevert("Signatures must not be empty");
+        STRegistry.registerSafeTransaction(ISafe(address(safe)), 0, safeTransaction);
+    }
+
+    function test_registerSafeTransactionSigCheckFailsWithBadSignatures(bytes32 r, bytes32 s, uint8 v) public {
+        SafeTransactionSignature[] memory signatures = new SafeTransactionSignature[](1);
+        signatures[0] = SafeTransactionSignature({ v: v, r: r, s: s, dynamicPart: bytes("") });
+
+        bytes32 transactionHash = safe.getTransactionHash(
+            address(0x73), 73, bytes("0xbeef"), Enum.Operation.Call, 73, 73, 73, address(0x73), address(0x73), 0
+        );
+
+        SafeTransaction memory safeTransaction = SafeTransaction({
+            to: address(0x73),
+            value: 73,
+            data: bytes("0xbeef"),
+            operation: 0,
+            safeTxGas: 73,
+            baseGas: 73,
+            gasPrice: 73,
+            gasToken: address(0x73),
+            refundReceiver: address(0x73),
+            signatures: signatures,
+            safeTxHash: transactionHash
+        });
+
+        vm.expectRevert();
+        STRegistry.registerSafeTransaction(ISafe(address(safe)), 0, safeTransaction);
+    }
 
     function test_encodeSignatures() public { }
 }
