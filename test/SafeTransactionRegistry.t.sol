@@ -41,7 +41,7 @@ contract SafeTransactionRegistryTest is PRBTest, StdCheats {
         owner2 = makeAddr("owner2");
         owner3 = makeAddr("owner3");
 
-        address[2] memory owners;
+        address[] memory owners = new address[](2);
         owners[0] = owner1;
         owners[1] = owner2;
 
