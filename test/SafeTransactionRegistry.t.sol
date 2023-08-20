@@ -15,6 +15,7 @@ import {
     ISafe
 } from "../src/SafeTransactionRegistry.sol";
 import { TestUtils } from "./TestUtils.t.sol";
+import { SafeTransactionRegistryHarness } from "./STRHarness.t.sol";
 
 interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
@@ -162,5 +163,7 @@ contract SafeTransactionRegistryTest is PRBTest, StdCheats {
         STRegistry.registerSafeTransaction(ISafe(address(safe)), 0, safeTransaction);
     }
 
-    function test_encodeSignatures() public { }
+    function test_encodeSignaturesMultipleSigTypes() public {
+        SafeTransactionRegistryHarness harness = new SafeTransactionRegistryHarness();
+    }
 }
