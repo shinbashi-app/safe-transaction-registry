@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GNU GPLv3
 pragma solidity >=0.8.19 <0.9.0;
 
 import { SafeTransactionRegistry, SafeTransaction, ISafe } from "../src/SafeTransactionRegistry.sol";
 import { SafeProxyFactory } from "safe-contracts/contracts/proxies/SafeProxyFactory.sol";
-import { SafeL2 } from "safe-contracts/contracts/SafeL2.sol";
+import { Safe, SafeL2 } from "safe-contracts/contracts/SafeL2.sol";
 import { CompatibilityFallbackHandler } from "safe-contracts/contracts/handler/CompatibilityFallbackHandler.sol";
 
 contract TestUtils {
@@ -79,5 +79,16 @@ contract TestUtils {
                 0
             )
         );
+    }
+
+    function getMessageHashForSafe(
+        address payable safe,
+        bytes calldata message
+    )
+        public
+        view
+        returns (bytes32 messageHash)
+    {
+        messageHash = handler.getMessageHashForSafe(Safe(safe), message);
     }
 }

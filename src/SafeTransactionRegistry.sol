@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GNU GPLv3
 pragma solidity ^0.8.21;
 
 import { console2 } from "forge-std/console2.sol";
@@ -64,8 +64,6 @@ contract SafeTransactionRegistry {
 
     uint8 public constant SIGNATURE_LENGTH_BYTES = 65;
 
-    constructor() { }
-
     function registerSafeTransaction(ISafe safe, uint256 nonce, SafeTransaction calldata safeTransaction) external {
         require(getSafeNonce(safe) <= nonce, "Nonce is too low");
         require(safeTransaction.signatures.length > 0, "Signatures must not be empty");
@@ -111,19 +109,6 @@ contract SafeTransactionRegistry {
         );
 
         safeTransaction.signatures.push(signatures);
-    }
-
-    function getStorageAt(uint256 offset, uint256 length) public view returns (bytes memory) {
-        bytes memory result = new bytes(length * 32);
-        for (uint256 index = 0; index < length; index++) {
-            // solhint-disable-next-line no-inline-assembly
-            /// @solidity memory-safe-assembly
-            assembly {
-                let word := sload(add(offset, index))
-                mstore(add(add(result, 0x20), mul(index, 0x20)), word)
-            }
-        }
-        return result;
     }
 
     function getSafeNonce(ISafe safe) internal view returns (uint256 nonce) {
